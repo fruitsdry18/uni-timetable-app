@@ -136,7 +136,7 @@ const TimeTable = () => {
               key={dayName}
               className="border-gray-400 border-r border-t px-2 text-center text-xs"
             >
-              {weekDays[index].getDate()}日{dayName}
+              {weekDays[index].getDate()}日<br></br>{dayName}
             </div>
           ))}
         </div>

@@ -1,3 +1,8 @@
+// git add .
+// git commit -m "update timetable"
+// git push origin main
+
+
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
