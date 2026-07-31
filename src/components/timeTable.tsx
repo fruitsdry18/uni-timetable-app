@@ -13,31 +13,116 @@ type Task = {
 const TimeTable = () => {
   const navigate = useNavigate();
 
-  // ログインユーザーの情報を保持するState
+  // ユーザー情報 State
   const [userInfo, setUserInfo] = useState<{
     username?: string;
     school?: string;
     grade?: string;
   }>({});
 
-  // 画面が開いたときにログイン中のユーザー情報を取得する
+  // 課題リスト State
+  const [taskList, setTaskList] = useState<Task[]>([]);
+
+  // 時間割データ State
+  const [timetableData, setTimeTableData] = useState<Array<any>>([
+    {
+      period: 1,
+      time: "9:00 - 10:40",
+      Mon: null,
+      Tue: null,
+      Wed: null,
+      Thu: null,
+      Fri: null,
+    },
+    {
+      period: 2,
+      time: "10:50 - 12:30",
+      Mon: null,
+      Tue: null,
+      Wed: null,
+      Thu: null,
+      Fri: null,
+    },
+    {
+      period: 3,
+      time: "13:30 - 15:10",
+      Mon: null,
+      Tue: null,
+      Wed: null,
+      Thu: null,
+      Fri: null,
+    },
+    {
+      period: 4,
+      time: "15:20 - 17:00",
+      Mon: null,
+      Tue: null,
+      Wed: null,
+      Thu: null,
+      Fri: null,
+    },
+    {
+      period: 5,
+      time: "17:00 - 18:40",
+      Mon: null,
+      Tue: null,
+      Wed: null,
+      Thu: null,
+      Fri: null,
+    },
+  ]);
+
+  // ----------------------------------------------------
+  // 1. 初回読み込み：Supabaseからユーザー情報・授業・課題を取得
+  // ----------------------------------------------------
   useEffect(() => {
-    const fetchUser = async () => {
+    const fetchData = async () => {
+      // ① ログインユーザー情報の取得
       const {
         data: { user },
       } = await supabase.auth.getUser();
-
-      if (user && user.user_metadata) {
+      if (!user) {
+        navigate("/login");
+        return;
+      }
+      if (user.user_metadata) {
         setUserInfo({
           username: user.user_metadata.username,
           school: user.user_metadata.school,
           grade: user.user_metadata.grade,
         });
       }
+
+      // ② Supabaseから「授業データ」を取得して時間割に反映
+      const { data: classData, error: classError } = await supabase
+        .from("classes")
+        .select("*");
+      if (!classError && classData) {
+        // 取得したデータで時間割Stateを更新
+        setTimeTableData((prev) =>
+          prev.map((row) => {
+            const newRow = { ...row };
+            classData.forEach((c) => {
+              if (c.period === row.period) {
+                newRow[c.day_key] = { name: c.name, room: c.room };
+              }
+            });
+            return newRow;
+          }),
+        );
+      }
+
+      // ③ Supabaseから「課題データ」を取得
+      const { data: taskData, error: taskError } = await supabase
+        .from("tasks")
+        .select("*");
+      if (!taskError && taskData) {
+        setTaskList(taskData);
+      }
     };
 
-    fetchUser();
-  }, []);
+    fetchData();
+  }, [navigate]);
 
   // ログアウト処理
   const handleLogout = async () => {
@@ -45,12 +130,13 @@ const TimeTable = () => {
     navigate("/login");
   };
 
-  // 今日の週の月曜日を設定
+  // ----------------------------------------------------
+  // 日付・カレンダー計算 logic
+  // ----------------------------------------------------
   const getInitialMonday = () => {
     const today = new Date();
     const dayOfWeek = today.getDay();
     const monday = new Date(today);
-
     if (dayOfWeek === 0) {
       monday.setDate(today.getDate() + 1);
     } else {
@@ -59,35 +145,28 @@ const TimeTable = () => {
     return monday;
   };
 
-  // 一週間戻る
   const [mondayDate, setMondayDate] = useState(getInitialMonday);
   const handlePrevWeek = () => {
     const prev = new Date(mondayDate);
     prev.setDate(prev.getDate() - 7);
     setMondayDate(prev);
   };
-
-  // 一週間進む
   const handleNextWeek = () => {
     const next = new Date(mondayDate);
     next.setDate(next.getDate() + 7);
     setMondayDate(next);
   };
 
-  // 表示している月曜日の週の日付オブジェクト（月〜金）
   const weekDays = [0, 1, 2, 3, 4].map((offset) => {
     const day = new Date(mondayDate);
     day.setDate(day.getDate() + offset);
     return day;
   });
-
   const fridayDate = weekDays[4];
 
-  // 年月・日付範囲の表示テキスト
   const yearMonthText = `${mondayDate.getFullYear()}年${mondayDate.getMonth() + 1}月`;
   const rangeText = `${mondayDate.getDate()}日～${fridayDate.getDate()}日`;
 
-  // 日付オブジェクトを "YYYY-MM-DD" 形式の文字列にする関数
   const formatDateStr = (d: Date) => {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -95,40 +174,47 @@ const TimeTable = () => {
     return `${year}-${month}-${day}`;
   };
 
-  // 課題リスト State（period を追加）
-  const [taskList, setTaskList] = useState<Task[]>([
-    { id: 1, title: "プログラミング課題", date: "2026-07-28", period: 2 },
-    { id: 2, title: "フロントエンド", date: "2026-07-29", period: 3 },
-  ]);
-
+  // ----------------------------------------------------
+  // 2. 課題追加＆削除 (Supabase連携)
+  // ----------------------------------------------------
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  // フォームの入力内容
-  const [taskTitle, setTaskTitle] = useState(""); // 課題名
-  const [taskDate, setTaskDate] = useState(""); // 期限日
-  const [selectedPeriod, setSelectedPeriod] = useState<number>(1); // 時間 (1〜5)
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDate, setTaskDate] = useState("");
+  const [selectedPeriod, setSelectedPeriod] = useState<number>(1);
 
-  // 課題を追加
-  const handleAddTask = () => {
+  const handleAddTask = async () => {
     if (!taskTitle || !taskDate) return;
-    const newTask: Task = {
-      id: Date.now(),
-      title: taskTitle,
-      date: taskDate,
-      period: selectedPeriod,
-    };
-    setTaskList([...taskList, newTask]);
 
-    setTaskTitle("");
-    setTaskDate("");
-    setSelectedPeriod(1);
-    setIsTaskModalOpen(false);
+    // Supabaseに追加保存
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert([{ title: taskTitle, date: taskDate, period: selectedPeriod }])
+      .select();
+
+    if (error) {
+      alert("課題の保存に失敗しました: " + error.message);
+    } else if (data) {
+      setTaskList([...taskList, data[0]]);
+      setTaskTitle("");
+      setTaskDate("");
+      setSelectedPeriod(1);
+      setIsTaskModalOpen(false);
+    }
   };
 
-  const handleDeleteTask = (id: number) => {
-    setTaskList(taskList.filter((task) => task.id !== id));
+  const handleDeleteTask = async (id: number) => {
+    // Supabaseから削除
+    const { error } = await supabase.from("tasks").delete().eq("id", id);
+    if (error) {
+      alert("削除に失敗しました: " + error.message);
+    } else {
+      setTaskList(taskList.filter((task) => task.id !== id));
+    }
   };
 
-  // 授業登録
+  // ----------------------------------------------------
+  // 3. 授業登録 (Supabase連携)
+  // ----------------------------------------------------
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{
     period: number;
@@ -144,57 +230,25 @@ const TimeTable = () => {
     setIsClassModalOpen(true);
   };
 
-  const [timetableData, setTimeTableData] = useState<Array<any>>([
-    {
-      period: 1,
-      time: "9:00 - 10:40",
-      Mon: null,
-      Tue: null,
-      Wed: null,
-      Thu: null,
-      Fri: null,
-    },
-    {
-      period: 2,
-      time: "10:50 - 12:30",
-      Mon: null,
-      Tue: { name: "プログラミング", room: "1-1" },
-      Wed: null,
-      Thu: null,
-      Fri: null,
-    },
-    {
-      period: 3,
-      time: "13:30 - 15:10",
-      Mon: null,
-      Tue: null,
-      Wed: { name: "プログラミング", room: "1-1" },
-      Thu: null,
-      Fri: null,
-    },
-    {
-      period: 4,
-      time: "15:20 - 17:00",
-      Mon: null,
-      Tue: null,
-      Wed: { name: "プログラミング", room: "1-1" },
-      Thu: null,
-      Fri: null,
-    },
-    {
-      period: 5,
-      time: "17:00 - 18:40",
-      Mon: null,
-      Tue: null,
-      Wed: null,
-      Thu: null,
-      Fri: null,
-    },
-  ]);
-
-  const handleSaveClass = () => {
+  const handleSaveClass = async () => {
     if (!selectedCell || !classNameInput) return;
 
+    // Supabaseに授業データを追加（または上書き保存）
+    const { error } = await supabase.from("classes").insert([
+      {
+        period: selectedCell.period,
+        day_key: selectedCell.dayKey,
+        name: classNameInput,
+        room: classRoomInput,
+      },
+    ]);
+
+    if (error) {
+      alert("授業の保存に失敗しました: " + error.message);
+      return;
+    }
+
+    // 画面のStateも更新
     const updatedTimetable = timetableData.map((row) => {
       if (row.period === selectedCell.period) {
         return {
@@ -220,7 +274,6 @@ const TimeTable = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-xl text-blue-500 font-bold">UNI・KANRI</h1>
-            {/* ログインユーザーの学校・学年・名前を表示 */}
             {userInfo.username && (
               <p className="text-[11px] text-gray-600 font-medium mt-0.5">
                 {userInfo.school} {userInfo.grade && `${userInfo.grade}年`} |{" "}
@@ -237,6 +290,7 @@ const TimeTable = () => {
           </button>
         </div>
       </header>
+
       <main>
         <div className="flex justify-between items-center bg-white border-b border-gray-400 px-4 py-3">
           <button
@@ -266,7 +320,7 @@ const TimeTable = () => {
               key={dayName}
               className="border-gray-400 border-r border-t px-2 text-center text-xs"
             >
-              {weekDays[index].getDate()}日<br></br>
+              {weekDays[index].getDate()}日<br />
               {dayName}
             </div>
           ))}
@@ -279,11 +333,9 @@ const TimeTable = () => {
                 <span className="font-bold text-xs text-gray-700">
                   {row.period}
                 </span>
-
                 <span className="scale-90 items-center">
                   {row.time.split(" - ")[0]}
                 </span>
-
                 <span className="scale-90">{row.time.split(" - ")[1]}</span>
               </div>
 
@@ -291,7 +343,6 @@ const TimeTable = () => {
                 (dayKey, dayIndex) => {
                   const subject = row[dayKey];
                   const cellDateStr = formatDateStr(weekDays[dayIndex]);
-
                   const matchingTasks = taskList.filter(
                     (task) =>
                       task.date === cellDateStr && task.period === row.period,
@@ -337,10 +388,10 @@ const TimeTable = () => {
           ))}
         </div>
 
+        {/* 課題一覧 */}
         <div className="mx-5 my-6">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-red-700 font-bold text-sm">課題・予定一覧</h2>
-
             <button
               onClick={() => setIsTaskModalOpen(true)}
               className="text-xs text-blue-600 border border-blue-600 rounded px-2 py-0.5 cursor-pointer"
@@ -358,7 +409,6 @@ const TimeTable = () => {
                 <span className="font-bold col-span-5 text-gray-700 truncate">
                   ・{task.title}
                 </span>
-
                 <span className="text-red-500 col-span-5 font-bold text-center">
                   期限: {task.date} ({task.period}限)
                 </span>
