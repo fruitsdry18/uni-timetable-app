@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import {Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
 const Registration = () => {
@@ -24,7 +24,7 @@ const Registration = () => {
     }
 
     // 1. SupabaseのAuthにメールとパスワードでユーザー作成
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email: email,
       password: password,
       // ユーザーの追加情報（ユーザーネームや学校など）をメタデータとして保存できるよ！
