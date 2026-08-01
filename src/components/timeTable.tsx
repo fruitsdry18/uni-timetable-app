@@ -6,24 +6,24 @@ import { supabase } from "../supabaseClient";
 type Task = {
   id: number;
   title: string;
-  date: string; // "YYYY-MM-DD"
-  period: number; // 1〜5時限
+  date: string; 
+  period: number; 
 };
 
 const TimeTable = () => {
   const navigate = useNavigate();
 
-  // ユーザー情報 State
+  // ユーザー情報 usestate
   const [userInfo, setUserInfo] = useState<{
     username?: string;
     school?: string;
     grade?: string;
   }>({});
 
-  // 課題リスト State
+  // 課題リスト useState
   const [taskList, setTaskList] = useState<Task[]>([]);
 
-  // 時間割データ State
+  // 時間割データ usestate
   const [timetableData, setTimeTableData] = useState<Array<any>>([
     {
       period: 1,
@@ -72,9 +72,9 @@ const TimeTable = () => {
     },
   ]);
 
-  // ----------------------------------------------------
-  // 1. 初回読み込み：Supabaseからユーザー情報・授業・課題を取得
-  // ----------------------------------------------------
+
+  //Supabase
+
   useEffect(() => {
     const fetchData = async () => {
       // ① ログインユーザー情報の取得
@@ -93,7 +93,7 @@ const TimeTable = () => {
         });
       }
 
-      // ② Supabaseから「授業データ」を取得して時間割に反映
+      // ② Supabase授業データ
       const { data: classData, error: classError } = await supabase
         .from("classes")
         .select("*");
@@ -112,7 +112,7 @@ const TimeTable = () => {
         );
       }
 
-      // ③ Supabaseから「課題データ」を取得
+      // ③ Supabase課題データ
       const { data: taskData, error: taskError } = await supabase
         .from("tasks")
         .select("*");
@@ -124,15 +124,13 @@ const TimeTable = () => {
     fetchData();
   }, [navigate]);
 
-  // ログアウト処理
+  // ログアウト
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/login");
   };
 
-  // ----------------------------------------------------
-  // 日付・カレンダー計算 logic
-  // ----------------------------------------------------
+
   const getInitialMonday = () => {
     const today = new Date();
     const dayOfWeek = today.getDay();
@@ -174,9 +172,7 @@ const TimeTable = () => {
     return `${year}-${month}-${day}`;
   };
 
-  // ----------------------------------------------------
-  // 2. 課題追加＆削除 (Supabase連携)
-  // ----------------------------------------------------
+
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDate, setTaskDate] = useState("");
@@ -185,7 +181,7 @@ const TimeTable = () => {
   const handleAddTask = async () => {
     if (!taskTitle || !taskDate) return;
 
-    // Supabaseに追加保存
+    // Supabase追加保存
     const { data, error } = await supabase
       .from("tasks")
       .insert([{ title: taskTitle, date: taskDate, period: selectedPeriod }])
@@ -277,7 +273,7 @@ const TimeTable = () => {
             {userInfo.username && (
               <p className="text-[11px] text-gray-600 font-medium mt-0.5">
                 {userInfo.school} {userInfo.grade && `${userInfo.grade}年`} |{" "}
-                {userInfo.username}さん
+                {userInfo.username}
               </p>
             )}
           </div>
