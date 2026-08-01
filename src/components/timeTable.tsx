@@ -371,7 +371,7 @@ const TimeTable = () => {
                               className="bg-red-500 text-white text-[9px] font-bold px-1 py-0.5 rounded truncate shadow-xs"
                               title={t.title}
                             >
-                              📌 {t.title}
+                              {t.title}
                             </div>
                           ))}
                         </div>
